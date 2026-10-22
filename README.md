@@ -31,11 +31,19 @@ If you get a 404, the mirror is mid-sync. Wait a few minutes and rerun `sudo apt
 
 ## 3. Put Go's bin directory on PATH
 
-Use `~/.zshrc` instead if `echo $SHELL` shows zsh:
+Use `~/.zshrc` or any other instead if `echo $SHELL` shows zsh or any:
+
+```bash
+echo $SHELL
+```
 
 ```bash
 echo 'export PATH=$PATH:$(go env GOPATH)/bin' >> ~/.bashrc
+```
+```bash
 source ~/.bashrc
+```
+```bash
 go env -u HTTP_PROXY HTTPS_PROXY 2>/dev/null
 ```
 
