@@ -6,6 +6,8 @@ Here's the full setup with katana added.
 
 ```bash
 unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy
+```
+```bash
 grep -rn -i proxy /etc/environment ~/.bashrc ~/.zshrc ~/.profile /etc/apt/apt.conf.d/ 2>/dev/null
 ```
 
@@ -23,6 +25,8 @@ Use `golang-go`, not `gccgo-go`, which is too old and conflicts with it. This al
 sudo apt remove -y gccgo-go 2>/dev/null
 sudo apt clean
 sudo apt update
+```
+```bash
 sudo apt install -y golang-go gcc
 go version    # should show go1.26.x, not gccgo
 ```
