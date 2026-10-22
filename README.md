@@ -1,8 +1,9 @@
-# Install-Golang-Subfinder-Amass-and-Katana
+# Install Go + Recon Tooling (Subfinder · Amass · Katana · gau · waybackurls) — Every Linux Distro
 
-# Install Go, Subfinder, Amass, and Katana — Every Linux Distro
-
-Here's the full setup with katana added, extended to cover **every major Linux
+Full setup for the Go-based recon stack — **subfinder** and **amass**
+(subdomain enumeration), **katana** (active crawling), and **gau** and
+**waybackurls** (passive URL collection from the Wayback Machine, Common Crawl,
+AlienVault OTX, and friends) — extended to cover **every major Linux
 distribution**: Debian/Ubuntu (and derivatives like Kali, Mint, Pop!_OS),
 Fedora, RHEL/CentOS/Rocky/AlmaLinux, Arch/Manjaro, openSUSE, Alpine, Void,
 Gentoo, and NixOS.
@@ -265,10 +266,18 @@ CGO_ENABLED=0 go install -v github.com/owasp-amass/amass/v5/cmd/amass@main
 
 # katana (needs CGO, so gcc must be installed)
 CGO_ENABLED=1 go install github.com/projectdiscovery/katana/cmd/katana@latest
+
+# gau (getallurls) — pure Go, no CGO
+go install -v github.com/lc/gau/v2/cmd/gau@latest
+
+# waybackurls — pure Go, no CGO
+go install -v github.com/tomnomnom/waybackurls@latest
 ```
 
 Skip your distro's packaged `amass` (apt/dnf/pacman/etc.) and the snap package,
-since both carry older v3/v4 builds.
+since both carry older v3/v4 builds. gau and waybackurls are pure-Go tools and
+need no C compiler, so they build fine on any distro — including Alpine —
+without `musl-dev`.
 
 ---
 
@@ -281,6 +290,8 @@ proxy:
 GOPROXY=direct go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
 CGO_ENABLED=0 GOPROXY=direct go install -v github.com/owasp-amass/amass/v5/cmd/amass@main
 CGO_ENABLED=1 GOPROXY=direct go install github.com/projectdiscovery/katana/cmd/katana@latest
+GOPROXY=direct go install -v github.com/lc/gau/v2/cmd/gau@latest
+GOPROXY=direct go install -v github.com/tomnomnom/waybackurls@latest
 ```
 
 ---
@@ -305,6 +316,16 @@ unzip -o katana_${V}_linux_amd64.zip katana && sudo mv katana /usr/local/bin/
 # amass
 wget https://github.com/owasp-amass/amass/releases/latest/download/amass_Linux_amd64.zip
 unzip -o amass_Linux_amd64.zip && sudo mv amass_Linux_amd64/amass /usr/local/bin/
+
+# gau
+V=$(curl -s https://api.github.com/repos/lc/gau/releases/latest | grep -oP '"tag_name": "v\K[^"]+')
+wget https://github.com/lc/gau/releases/download/v${V}/gau_${V}_linux_amd64.tar.gz
+tar -xzf gau_${V}_linux_amd64.tar.gz gau && sudo mv gau /usr/local/bin/
+
+# waybackurls (rarely re-released; go install is the reliable route)
+V=$(curl -s https://api.github.com/repos/tomnomnom/waybackurls/releases/latest | grep -oP '"tag_name": "v?\K[^"]+')
+wget https://github.com/tomnomnom/waybackurls/releases/download/v${V}/waybackurls-linux-amd64-${V}.tgz
+tar -xzf waybackurls-linux-amd64-${V}.tgz waybackurls && sudo mv waybackurls /usr/local/bin/
 ```
 
 > **Alpine / musl note:** these glibc-targeted binaries may not run directly on
@@ -387,16 +408,21 @@ nix-shell -p chromium
 **Same on every distro.**
 
 ```bash
-which subfinder amass katana
+which subfinder amass katana gau waybackurls
 subfinder -version
 amass -h
 katana -version
+gau --version
+waybackurls -h    # prints usage; no version flag
 ```
 
 API keys make a big difference to how many subdomains you find:
 
 - **subfinder:** `~/.config/subfinder/provider-config.yaml`, created on first run.
 - **amass:** `~/.config/amass/datasources.yaml`.
+- **gau:** optional `~/.gau.toml` (or `--config`) for OTX / URLScan keys and
+  provider selection; works without any config too.
+- **waybackurls:** no config or keys — pulls straight from the Wayback Machine.
 
 Quick test:
 
@@ -404,9 +430,18 @@ Quick test:
 subfinder -d example.com -silent
 amass enum -d example.com
 katana -u https://example.com -jc
+gau example.com
+waybackurls example.com
 
 # chained: find subdomains, then crawl them
 subfinder -d example.com -silent | katana -silent
+
+# chained: find subdomains, then pull every known URL for them (passive)
+subfinder -d example.com -silent | gau
+subfinder -d example.com -silent | waybackurls
+
+# combine passive sources, dedupe, and feed into katana for active crawling
+(echo example.com | gau; echo example.com | waybackurls) | sort -u | katana -silent
 ```
 
 ---
