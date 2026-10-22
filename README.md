@@ -43,12 +43,7 @@ echo $SHELL
 
 ```bash
 echo 'export PATH=$PATH:$(go env GOPATH)/bin' >> ~/.bashrc
-```
-```bash
 source ~/.bashrc
-```
-```bash
-go env -u HTTP_PROXY HTTPS_PROXY 2>/dev/null
 ```
 
 ## 4. Install the tools
