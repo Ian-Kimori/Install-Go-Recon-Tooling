@@ -1,25 +1,122 @@
 # Install-Golang-Subfinder-Amass-and-Katana
 
-Here's the full setup with katana added.
+# Install Go, Subfinder, Amass, and Katana — Every Linux Distro
+
+Here's the full setup with katana added, extended to cover **every major Linux
+distribution**: Debian/Ubuntu (and derivatives like Kali, Mint, Pop!_OS),
+Fedora, RHEL/CentOS/Rocky/AlmaLinux, Arch/Manjaro, openSUSE, Alpine, Void,
+Gentoo, and NixOS.
+
+Most of this guide is distro-independent. Only four things actually differ
+between distros: (1) where proxy settings hide in your package-manager config,
+(2) how you install Go and a C compiler, (3) how you install Chromium for
+headless crawling, and (4) a handful of troubleshooting fixes. Everything
+else — PATH setup, `go install`, the prebuilt-binary fallback, and
+verification — is identical everywhere.
+
+> **Section map**
+> - Steps **3, 4, "If go install times out", "Fallback binaries"**, and
+>   **6 (verify)** are the same on all distros — run them as written.
+> - Steps **1 (proxy)**, **2 (install Go)**, and **5 (Chromium)** have a
+>   per-distro variant below. Find your distro's block and use that.
+
+---
 
 ## 1. Clear the dead proxy
+
+The shell part is **identical on every distro**:
 
 ```bash
 unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy
 ```
 ```bash
-grep -rn -i proxy /etc/environment ~/.bashrc ~/.zshrc ~/.profile /etc/apt/apt.conf.d/ 2>/dev/null
+grep -rn -i proxy /etc/environment ~/.bashrc ~/.zshrc ~/.profile 2>/dev/null
 ```
 
-Delete any line pointing at `172.234.27.37:8080` (use `sudo nano` for files under `/etc`). Then open a new terminal and confirm it's gone:
+Delete any line pointing at `172.234.27.37:8080` (use `sudo nano` for files
+under `/etc`). Then open a new terminal and confirm it's gone:
 
 ```bash
 env | grep -i proxy    # should print nothing
 ```
 
+### Also check your package manager's own proxy config
+
+A proxy can also be baked into the package manager itself, which is what breaks
+`apt update` / `dnf update` even after the env vars are cleared. Check the file
+for your distro and delete any dead-proxy line:
+
+| Distro family | Package-manager proxy lives in |
+|---|---|
+| Debian / Ubuntu / Kali / Mint | `/etc/apt/apt.conf.d/` (any file with `Acquire::http::Proxy`) |
+| Fedora / RHEL / Rocky / Alma | `/etc/dnf/dnf.conf` (`proxy=` line) |
+| CentOS 7 (yum) | `/etc/yum.conf` (`proxy=` line) |
+| Arch / Manjaro | pacman has no proxy config — it reads `http_proxy`/`https_proxy` env vars only |
+| openSUSE | `/etc/sysconfig/proxy` and `/etc/zypp/zypp.conf`; also `PROXY_ENABLED` in `/etc/sysconfig/proxy` |
+| Alpine | apk reads `http_proxy`/`https_proxy` env vars only (no separate config) |
+| Void | xbps reads env vars; also check `/etc/xbps.d/` |
+| Gentoo | `/etc/portage/make.conf` (`http_proxy`/`https_proxy` lines) |
+| NixOS | `networking.proxy.*` in `/etc/nixos/configuration.nix` |
+
+Generalized grep across the common spots:
+
+```bash
+grep -rn -i proxy /etc/apt/apt.conf.d/ /etc/dnf/dnf.conf /etc/yum.conf \
+  /etc/zypp/zypp.conf /etc/sysconfig/proxy /etc/portage/make.conf \
+  /etc/xbps.d/ 2>/dev/null
+```
+
+---
+
 ## 2. Install Go
 
-Use `golang-go`, not `gccgo-go`, which is too old and conflicts with it. This also pulls in `gcc`, which katana needs:
+subfinder, amass v5, and katana need a **recent** Go toolchain (roughly Go
+1.23+). Many distro packages ship an older Go, so there are two routes:
+
+- **Method A (universal, recommended):** official Go tarball. Same on every
+  distro, always current, and sidesteps every "requires go >= 1.xx" problem.
+- **Method B (per-distro package manager):** convenient, but only use it if
+  your distro ships a new enough Go (Arch, Fedora, openSUSE Tumbleweed, Alpine
+  edge, Void, Gentoo, NixOS are generally fine; Debian stable, Ubuntu LTS,
+  RHEL/CentOS, and amass v5 together are often **too old**).
+
+You still need a **C compiler (`gcc`)** regardless of method, because katana is
+built with `CGO_ENABLED=1`.
+
+### Method A — Official Go tarball (works on all distros)
+
+```bash
+cd /tmp
+
+# fetch the latest version string (e.g. go1.26.0)
+GO_VERSION=$(curl -s https://go.dev/VERSION?m=text | head -1)
+
+# amd64; on ARM boards swap linux-amd64 -> linux-arm64
+wget https://go.dev/dl/${GO_VERSION}.linux-amd64.tar.gz
+
+sudo rm -rf /usr/local/go
+sudo tar -C /usr/local -xzf ${GO_VERSION}.linux-amd64.tar.gz
+
+export PATH=$PATH:/usr/local/go/bin
+go version    # should show the version you just installed
+```
+
+Make the PATH entry permanent (and still do **step 3** for the tool bin dir):
+
+```bash
+echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc    # or ~/.zshrc
+source ~/.bashrc
+```
+
+You still need gcc — install it with your distro's command from Method B below
+(just the `gcc`/build-tools part).
+
+### Method B — Per-distro package manager
+
+#### Debian / Ubuntu / Kali / Mint / Pop!_OS (apt)
+
+Use `golang-go`, not `gccgo-go`, which is too old and conflicts with it. This
+also pulls in `gcc`, which katana needs:
 
 ```bash
 sudo apt remove -y gccgo-go 2>/dev/null
@@ -31,11 +128,114 @@ sudo apt install -y golang-go gcc
 go version    # should show go1.26.x, not gccgo
 ```
 
-If you get a 404, the mirror is mid-sync. Wait a few minutes and rerun `sudo apt update`.
+If you get a 404, the mirror is mid-sync. Wait a few minutes and rerun
+`sudo apt update`.
+
+> Debian stable / Ubuntu LTS often ship an older Go. If `go version` is below
+> what amass v5 or katana demand, use **Method A** instead.
+
+#### Fedora (dnf)
+
+```bash
+sudo dnf install -y golang gcc
+go version
+```
+
+Fedora usually ships a current Go, so Method B is fine here.
+
+#### RHEL / CentOS Stream / Rocky / AlmaLinux (dnf)
+
+```bash
+sudo dnf install -y golang gcc
+go version
+```
+
+> RHEL-family Go can lag. If it's too old, use **Method A**. Chromium (step 5)
+> needs EPEL enabled:
+> ```bash
+> sudo dnf install -y epel-release
+> ```
+
+#### CentOS 7 (yum)
+
+```bash
+sudo yum install -y golang gcc
+go version
+```
+
+> CentOS 7's `golang` is very old (1.x series) and will almost certainly be
+> rejected by amass/katana. Prefer **Method A** on CentOS 7.
+
+#### Arch / Manjaro / EndeavourOS (pacman)
+
+```bash
+sudo pacman -S --needed go gcc
+go version
+```
+
+Arch tracks upstream closely, so this is always current.
+
+#### openSUSE (Leap / Tumbleweed — zypper)
+
+```bash
+sudo zypper install -y go gcc
+go version
+```
+
+> On openSUSE Leap the `go` meta-package may point at an older release; if so,
+> install a versioned package (e.g. `go1.24`) or use **Method A**. Tumbleweed
+> is current.
+
+#### Alpine (apk)
+
+Alpine uses **musl**, not glibc, so CGO builds (katana) need `musl-dev`:
+
+```bash
+sudo apk add go gcc musl-dev
+go version
+```
+
+> If `go` isn't found, enable the community repo in `/etc/apk/repositories`,
+> then `sudo apk update`.
+
+#### Void Linux (xbps)
+
+```bash
+sudo xbps-install -S go gcc
+go version
+```
+
+#### Gentoo (emerge)
+
+```bash
+sudo emerge --ask dev-lang/go
+# gcc is part of the base system; install explicitly only if missing:
+sudo emerge --ask sys-devel/gcc
+go version
+```
+
+#### NixOS / Nix (nix-shell)
+
+Imperative, per-shell (gives you go **and** gcc for CGO in one shot):
+
+```bash
+nix-shell -p go gcc
+go version
+```
+
+Or declaratively, add to `/etc/nixos/configuration.nix`:
+
+```nix
+environment.systemPackages = with pkgs; [ go gcc ];
+```
+then `sudo nixos-rebuild switch`.
+
+---
 
 ## 3. Put Go's bin directory on PATH
 
-Use `~/.zshrc` or any other instead if `echo $SHELL` shows zsh or any:
+**Same on every distro.** Use `~/.zshrc` or any other instead if `echo $SHELL`
+shows zsh or any:
 
 ```bash
 echo $SHELL
@@ -46,7 +246,15 @@ echo 'export PATH=$PATH:$(go env GOPATH)/bin' >> ~/.bashrc
 source ~/.bashrc
 ```
 
+> If you installed Go via **Method A (tarball)**, make sure both
+> `/usr/local/go/bin` (the toolchain) **and** `$(go env GOPATH)/bin` (your
+> installed tools) are on PATH.
+
+---
+
 ## 4. Install the tools
+
+**Same on every distro** once Go and gcc are in place:
 
 ```bash
 # subfinder
@@ -59,11 +267,15 @@ CGO_ENABLED=0 go install -v github.com/owasp-amass/amass/v5/cmd/amass@main
 CGO_ENABLED=1 go install github.com/projectdiscovery/katana/cmd/katana@latest
 ```
 
-Skip `apt install amass` and the snap package, since both carry older v3/v4 builds.
+Skip your distro's packaged `amass` (apt/dnf/pacman/etc.) and the snap package,
+since both carry older v3/v4 builds.
+
+---
 
 ## If `go install` times out
 
-Fetch straight from GitHub instead of the Go module proxy:
+**Same on every distro.** Fetch straight from GitHub instead of the Go module
+proxy:
 
 ```bash
 GOPROXY=direct go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
@@ -71,7 +283,11 @@ CGO_ENABLED=0 GOPROXY=direct go install -v github.com/owasp-amass/amass/v5/cmd/a
 CGO_ENABLED=1 GOPROXY=direct go install github.com/projectdiscovery/katana/cmd/katana@latest
 ```
 
+---
+
 ## Fallback: prebuilt binaries, no Go needed
+
+**Same on every distro** (glibc). These are statically linked Go binaries:
 
 ```bash
 cd /tmp
@@ -91,15 +307,84 @@ wget https://github.com/owasp-amass/amass/releases/latest/download/amass_Linux_a
 unzip -o amass_Linux_amd64.zip && sudo mv amass_Linux_amd64/amass /usr/local/bin/
 ```
 
+> **Alpine / musl note:** these glibc-targeted binaries may not run directly on
+> Alpine. The pure-Go ones (subfinder, amass with `CGO_ENABLED=0`) usually work
+> because they're static; if a binary fails to start, either install the glibc
+> shim `sudo apk add gcompat`, or build from source as in step 4 (with
+> `musl-dev` installed).
+>
+> **ARM note:** swap `linux_amd64` / `Linux_amd64` for the arm64 asset name on
+> ARM hardware.
+
+---
+
 ## 5. Optional: headless crawling for katana
 
-Katana's `-headless` mode, used for JavaScript-heavy sites, needs a Chromium-based browser. It can download one itself on first use, or you can install it:
+Katana's `-headless` mode, used for JavaScript-heavy sites, needs a
+Chromium-based browser. It can download one itself on first use, or you can
+install it with your distro's package manager:
+
+#### Debian / Ubuntu / Kali / Mint
 
 ```bash
-sudo apt install -y chromium-browser
+sudo apt install -y chromium-browser    # Ubuntu; on Debian the package is 'chromium'
 ```
 
+#### Fedora
+
+```bash
+sudo dnf install -y chromium
+```
+
+#### RHEL / CentOS / Rocky / Alma (needs EPEL — see step 2)
+
+```bash
+sudo dnf install -y epel-release
+sudo dnf install -y chromium
+```
+
+#### Arch / Manjaro
+
+```bash
+sudo pacman -S chromium
+```
+
+#### openSUSE
+
+```bash
+sudo zypper install -y chromium
+```
+
+#### Alpine
+
+```bash
+sudo apk add chromium chromium-chromedriver nss freetype harfbuzz ca-certificates ttf-freefont
+```
+
+#### Void
+
+```bash
+sudo xbps-install -S chromium
+```
+
+#### Gentoo
+
+```bash
+sudo emerge --ask www-client/chromium    # compiles for hours; 'google-chrome' binary pkg is faster
+```
+
+#### NixOS
+
+```bash
+nix-shell -p chromium
+# or add 'chromium' to environment.systemPackages in configuration.nix
+```
+
+---
+
 ## 6. Verify and configure
+
+**Same on every distro.**
 
 ```bash
 which subfinder amass katana
@@ -124,13 +409,19 @@ katana -u https://example.com -jc
 subfinder -d example.com -silent | katana -silent
 ```
 
+---
+
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| `proxyconnect tcp ... i/o timeout` | Proxy env var still set. Redo step 1 in a fresh terminal. |
+| `proxyconnect tcp ... i/o timeout` | Proxy env var still set. Redo step 1 in a fresh terminal (and check your package manager's proxy config). |
 | `404 Not Found` from apt | Stale index. Run `sudo apt update`, or wait for the mirror to sync. |
+| `404 Not Found` / stale metadata (dnf/zypp/pacman) | `sudo dnf clean all && sudo dnf makecache` / `sudo zypper refresh` / `sudo pacman -Syy`. |
 | `command not found` after install | PATH missing Go's bin. Redo step 3, or run `~/go/bin/<tool>`. |
-| `requires go >= 1.xx` | Go is too old or gccgo is installed. Redo step 2. |
-| `gcc: not found` (katana) | Run `sudo apt install -y gcc`. |
+| `requires go >= 1.xx` | Go is too old or gccgo is installed. Use **Method A** (tarball) in step 2, or on Debian/Ubuntu redo the apt steps. |
+| `gcc: not found` (katana) | Install a C compiler: `apt/dnf/zypp install gcc`, `pacman -S gcc`, `apk add gcc musl-dev`, etc. |
 | `proxy.golang.org` timeout | Prefix the install with `GOPROXY=direct`. |
+| Alpine: built binary won't start | Build from source with `musl-dev` installed, or `apk add gcompat` for glibc binaries. |
+| RHEL/CentOS: `chromium` has no match | Enable EPEL first: `sudo dnf install -y epel-release`. |
+| katana `-headless` can't find a browser | Install Chromium (step 5), or let katana auto-download on first `-headless` run. |
