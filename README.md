@@ -1,9 +1,14 @@
 # Install Go + Recon Tooling (Subfinder · Amass · Katana · gau · waybackurls) — Every Linux Distro
 
+# Install Go + Recon Tooling (Subfinder · Amass · Katana · gau · waybackurls · httpx · trufflehog) — Every Linux Distro
+
 Full setup for the Go-based recon stack — **subfinder** and **amass**
-(subdomain enumeration), **katana** (active crawling), and **gau** and
+(subdomain enumeration), **katana** (active crawling), **gau** and
 **waybackurls** (passive URL collection from the Wayback Machine, Common Crawl,
-AlienVault OTX, and friends) — extended to cover **every major Linux
+AlienVault OTX, and friends), **httpx** (fast HTTP probing — which hosts are
+live, plus their status codes, titles, and tech fingerprints), and
+**trufflehog** (secrets scanning across git repos, GitHub/GitLab orgs,
+filesystems, and URLs) — extended to cover **every major Linux
 distribution**: Debian/Ubuntu (and derivatives like Kali, Mint, Pop!_OS),
 Fedora, RHEL/CentOS/Rocky/AlmaLinux, Arch/Manjaro, openSUSE, Alpine, Void,
 Gentoo, and NixOS.
@@ -13,7 +18,8 @@ between distros: (1) where proxy settings hide in your package-manager config,
 (2) how you install Go and a C compiler, (3) how you install Chromium for
 headless crawling, and (4) a handful of troubleshooting fixes. Everything
 else — PATH setup, `go install`, the prebuilt-binary fallback, and
-verification — is identical everywhere.
+verification — is identical everywhere. `httpx` and `trufflehog` are both pure
+Go and need no C compiler, so they add nothing distro-specific.
 
 > **Section map**
 > - Steps **3, 4, "If go install times out", "Fallback binaries"**, and
@@ -82,7 +88,8 @@ subfinder, amass v5, and katana need a **recent** Go toolchain (roughly Go
   RHEL/CentOS, and amass v5 together are often **too old**).
 
 You still need a **C compiler (`gcc`)** regardless of method, because katana is
-built with `CGO_ENABLED=1`.
+built with `CGO_ENABLED=1`. (httpx, trufflehog, gau, and waybackurls do **not**
+need it — they're pure Go.)
 
 ### Method A — Official Go tarball (works on all distros)
 
@@ -272,12 +279,30 @@ go install -v github.com/lc/gau/v2/cmd/gau@latest
 
 # waybackurls — pure Go, no CGO
 go install -v github.com/tomnomnom/waybackurls@latest
+
+# httpx (ProjectDiscovery HTTP prober) — pure Go, no CGO
+go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
+
+# trufflehog (secrets scanner) — pure Go, no CGO
+go install github.com/trufflesecurity/trufflehog/v3@latest
 ```
 
 Skip your distro's packaged `amass` (apt/dnf/pacman/etc.) and the snap package,
-since both carry older v3/v4 builds. gau and waybackurls are pure-Go tools and
-need no C compiler, so they build fine on any distro — including Alpine —
-without `musl-dev`.
+since both carry older v3/v4 builds. gau, waybackurls, httpx, and trufflehog are
+pure-Go tools and need no C compiler, so they build fine on any distro —
+including Alpine — without `musl-dev`.
+
+> **httpx naming clash:** ProjectDiscovery's `httpx` shares its name with the
+> Python `httpx` library and, on some distros, a differently-packaged binary
+> (Kali ships the ProjectDiscovery tool as `httpx-toolkit`). After installing,
+> run `which httpx` and confirm it points at `$(go env GOPATH)/bin/httpx` — not
+> a `/usr/bin/httpx` left behind by a `pip install httpx`. Prefer `go install`
+> or the prebuilt binary over distro packages for this one.
+>
+> **trufflehog without Go:** trufflehog pulls in a lot of dependencies, so
+> `go install` can be slow. The official one-line install script (see the
+> fallback section) grabs the right prebuilt binary and needs no Go toolchain
+> at all.
 
 ---
 
@@ -292,6 +317,8 @@ CGO_ENABLED=0 GOPROXY=direct go install -v github.com/owasp-amass/amass/v5/cmd/a
 CGO_ENABLED=1 GOPROXY=direct go install github.com/projectdiscovery/katana/cmd/katana@latest
 GOPROXY=direct go install -v github.com/lc/gau/v2/cmd/gau@latest
 GOPROXY=direct go install -v github.com/tomnomnom/waybackurls@latest
+GOPROXY=direct go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
+GOPROXY=direct go install github.com/trufflesecurity/trufflehog/v3@latest
 ```
 
 ---
@@ -326,13 +353,26 @@ tar -xzf gau_${V}_linux_amd64.tar.gz gau && sudo mv gau /usr/local/bin/
 V=$(curl -s https://api.github.com/repos/tomnomnom/waybackurls/releases/latest | grep -oP '"tag_name": "v?\K[^"]+')
 wget https://github.com/tomnomnom/waybackurls/releases/download/v${V}/waybackurls-linux-amd64-${V}.tgz
 tar -xzf waybackurls-linux-amd64-${V}.tgz waybackurls && sudo mv waybackurls /usr/local/bin/
+
+# httpx
+V=$(curl -s https://api.github.com/repos/projectdiscovery/httpx/releases/latest | grep -oP '"tag_name": "v\K[^"]+')
+wget https://github.com/projectdiscovery/httpx/releases/download/v${V}/httpx_${V}_linux_amd64.zip
+unzip -o httpx_${V}_linux_amd64.zip httpx && sudo mv httpx /usr/local/bin/
+
+# trufflehog — official install script (no Go needed; grabs the right prebuilt binary)
+curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sudo sh -s -- -b /usr/local/bin
+
+# trufflehog — manual, if you'd rather not pipe a script to sh
+V=$(curl -s https://api.github.com/repos/trufflesecurity/trufflehog/releases/latest | grep -oP '"tag_name": "v\K[^"]+')
+wget https://github.com/trufflesecurity/trufflehog/releases/download/v${V}/trufflehog_${V}_linux_amd64.tar.gz
+tar -xzf trufflehog_${V}_linux_amd64.tar.gz trufflehog && sudo mv trufflehog /usr/local/bin/
 ```
 
 > **Alpine / musl note:** these glibc-targeted binaries may not run directly on
-> Alpine. The pure-Go ones (subfinder, amass with `CGO_ENABLED=0`) usually work
-> because they're static; if a binary fails to start, either install the glibc
-> shim `sudo apk add gcompat`, or build from source as in step 4 (with
-> `musl-dev` installed).
+> Alpine. The pure-Go ones (subfinder, amass with `CGO_ENABLED=0`, gau,
+> waybackurls, httpx, trufflehog) usually work because they're static; if a
+> binary fails to start, either install the glibc shim `sudo apk add gcompat`,
+> or build from source as in step 4 (with `musl-dev` installed).
 >
 > **ARM note:** swap `linux_amd64` / `Linux_amd64` for the arm64 asset name on
 > ARM hardware.
@@ -343,7 +383,8 @@ tar -xzf waybackurls-linux-amd64-${V}.tgz waybackurls && sudo mv waybackurls /us
 
 Katana's `-headless` mode, used for JavaScript-heavy sites, needs a
 Chromium-based browser. It can download one itself on first use, or you can
-install it with your distro's package manager:
+install it with your distro's package manager. (httpx and trufflehog do **not**
+need a browser.)
 
 #### Debian / Ubuntu / Kali / Mint
 
@@ -408,12 +449,14 @@ nix-shell -p chromium
 **Same on every distro.**
 
 ```bash
-which subfinder amass katana gau waybackurls
+which subfinder amass katana gau waybackurls httpx trufflehog
 subfinder -version
 amass -h
 katana -version
 gau --version
-waybackurls -h    # prints usage; no version flag
+waybackurls -h       # prints usage; no version flag
+httpx -version
+trufflehog --version
 ```
 
 API keys make a big difference to how many subdomains you find:
@@ -423,6 +466,13 @@ API keys make a big difference to how many subdomains you find:
 - **gau:** optional `~/.gau.toml` (or `--config`) for OTX / URLScan keys and
   provider selection; works without any config too.
 - **waybackurls:** no config or keys — pulls straight from the Wayback Machine.
+- **httpx:** no config file or API keys — it just probes. Behavior is driven by
+  flags (`-title`, `-status-code`, `-tech-detect`, `-follow-redirects`,
+  `-json`, etc.).
+- **trufflehog:** no API keys required to run. For GitHub/GitLab scans — private
+  repos, or just to avoid rate limits — set a token via the `GITHUB_TOKEN`
+  (or `GITLAB_TOKEN`) env var, or `--token`. Custom/extra detectors go in a
+  YAML passed with `--config`.
 
 Quick test:
 
@@ -432,6 +482,8 @@ amass enum -d example.com
 katana -u https://example.com -jc
 gau example.com
 waybackurls example.com
+httpx -u https://example.com
+trufflehog git https://github.com/trufflesecurity/test_keys   # known-positive test repo
 
 # chained: find subdomains, then crawl them
 subfinder -d example.com -silent | katana -silent
@@ -442,6 +494,24 @@ subfinder -d example.com -silent | waybackurls
 
 # combine passive sources, dedupe, and feed into katana for active crawling
 (echo example.com | gau; echo example.com | waybackurls) | sort -u | katana -silent
+
+# chained: find subdomains, then keep only the ones that are actually live
+subfinder -d example.com -silent | httpx -silent
+
+# probe live hosts with status code, page title, and tech fingerprint
+subfinder -d example.com -silent | httpx -silent -status-code -title -tech-detect
+
+# scan a GitHub repo or whole org for leaked secrets
+#   (set GITHUB_TOKEN first for private repos / higher rate limits)
+trufflehog github --repo=https://github.com/example/repo
+trufflehog github --org=example-org
+
+# scan a local checkout's full git history, or just the working tree
+trufflehog git file://$(pwd)
+trufflehog filesystem /path/to/code
+
+# show only verified (confirmed-live) secrets
+trufflehog git https://github.com/example/repo --results=verified   # older versions: --only-verified
 ```
 
 ---
@@ -460,3 +530,6 @@ subfinder -d example.com -silent | waybackurls
 | Alpine: built binary won't start | Build from source with `musl-dev` installed, or `apk add gcompat` for glibc binaries. |
 | RHEL/CentOS: `chromium` has no match | Enable EPEL first: `sudo dnf install -y epel-release`. |
 | katana `-headless` can't find a browser | Install Chromium (step 5), or let katana auto-download on first `-headless` run. |
+| `httpx` runs but behaves like the Python tool / wrong flags | Naming clash. Check `which httpx` points at `$(go env GOPATH)/bin/httpx`; remove any pip `httpx`, or on Kali use the `httpx-toolkit` package. |
+| trufflehog `go install` is very slow or times out | It has many dependencies — use the official install script or the prebuilt binary (fallback section) instead. |
+| trufflehog GitHub scan hits rate limits / can't see private repos | Export `GITHUB_TOKEN` (or pass `--token`) before scanning. |
