@@ -247,8 +247,7 @@ then `sudo nixos-rebuild switch`.
 
 ## 3. Put Go's bin directory on PATH
 
-**Same on every distro.** Use `~/.zshrc` or any other instead if `echo $SHELL`
-shows zsh or any:
+**Same on every distro.** Use `~/.bashrc` or `~/.zshrc` or any other instead according to `echo $SHELL` output:
 
 ```bash
 echo $SHELL
@@ -258,7 +257,11 @@ echo $SHELL
 echo 'export PATH=$PATH:$(go env GOPATH)/bin' >> ~/.bashrc
 source ~/.bashrc
 ```
-
+**or ~/.zshrc**
+```bash
+echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.zshrc
+source ~/.zshrc
+```
 > If you installed Go via **Method A (tarball)**, make sure both
 > `/usr/local/go/bin` (the toolchain) **and** `$(go env GOPATH)/bin` (your
 > installed tools) are on PATH.
