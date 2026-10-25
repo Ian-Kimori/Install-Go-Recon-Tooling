@@ -112,8 +112,13 @@ go version    # should show the version you just installed
 Make the PATH entry permanent (and still do **step 3** for the tool bin dir):
 
 ```bash
-echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc    # or ~/.zshrc
+echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc   
 source ~/.bashrc
+```
+**or ~/.zshrc**
+```bash
+echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.zshrc
+source ~/.zshrc
 ```
 
 You still need gcc — install it with your distro's command from Method B below
